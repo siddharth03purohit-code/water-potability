@@ -1,212 +1,100 @@
+import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns 
-import plotly.express as px 
+import seaborn as sns
+import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report,confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix
 
-#---------------------
+st.title("💧 Water Potability Prediction App")
+
+# ---------------------
 # Load and clean data
-#---------------------
+# ---------------------
+@st.cache_data
+def load_data():
+    data = pd.read_csv("water_potability.csv")
+    return data.dropna()
 
-data = pd.read_csv("water_potability.csv")
-data = data.dropna() # you could use imputation here instead of dropping 
+data = load_data()
 
-#------------------------
-# check for missing values
-#------------------------
-print("Missing values after dropping NaNs:")
-print(data.isnull().sum())
+st.subheader("Missing values after dropping NaNs")
+st.write(data.isnull().sum())
 
-#-------------------------
-# plotly Histogram (EDA)
-#-------------------------
-figure = px.histogram(
-    data,
-    x="ph",
-    color="Potability",
-    title="Factors Affecting Water Quality: PH"
-)
-figure.update_layout(barmode='group')
-figure.show()
+# -------------------------
+# Plotly Histograms (EDA)
+# -------------------------
+st.subheader("Exploratory Data Analysis")
 
-figure = px.histogram(
-    data,
-    x="Hardness",
-    color="Potability",
-    title="Factors Affecting Water Quality: Hardness"
-)
-figure.update_layout(barmode='group')
-figure.show()
-
-figure = px.histogram(
-        data,
-        x="Solids",
-        color="Potability",
-        title=f"Factors Affecting Water Quality:Solids "
-    )
-figure.update_layout(barmode='group')
-figure.show()
-
-
-figure = px.histogram(
-        data,
-        x= "Chloramines",
-        color="Potability",
-        title=f"Factors Affecting Water Quality: Chloramines "
-    )
-figure.update_layout(barmode='group')
-figure.show()
-
-
-figure = px.histogram(
-        data,
-        x= "Sulfate",
-        color="Potability",
-        title=f"Factors Affecting Water Quality: Sulfate"
-    )
-figure.update_layout(barmode='group')
-figure.show()
-
-figure = px.histogram(
-     data,
-     x="Conductivity",
-     color="Potability",
-     title=f"Factors Affecting Water Quality: Conductivity"
-)
-figure.update_layout(barmode='group')
-figure.show()
-
-figure = px.histogram(
-     data,
-     x="Organic_carbon",
-     color="Potability",
-     title=f"Factors Affecting Water Quality: Organic_carbon"
-)
-figure.update_layout(barmode='group')
-figure.show()
-
-figure = px.histogram(
-        data,
-        x= "Trihalomethanes",
-        color="Potability",
-        title=f"Factors Affecting Water Quality: Trihalomethanes"
-    )
-figure.update_layout(barmode='group')
-figure.show()
-
-figure = px.histogram(
-        data,
-        x= "Turbidity",
-        color="Potability",
-        title=f"Factors Affecting Water Quality: Turbidity"
-)
-figure.update_layout(barmode='group')
-figure.show()
-
+for col in ["ph","Hardness","Solids","Chloramines","Sulfate","Conductivity",
+            "Organic_carbon","Trihalomethanes","Turbidity"]:
+    fig = px.histogram(data, x=col, color="Potability",
+                       title=f"Factors Affecting Water Quality: {col}")
+    fig.update_layout(barmode='group')
+    st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------
 # Correlation analysis
 # ----------------------
-
+st.subheader("Correlation with pH")
 correlation = data.corr()
-print("\nCorrelation with PH")
-print(correlation["ph"].sort_values(ascending=False))
+st.write(correlation["ph"].sort_values(ascending=False))
 
-# Step 1: Split features and target
+# ----------------------
+# Model training
+# ----------------------
 X = data.drop("Potability", axis=1)
 y = data["Potability"]
 
-# Step 2: Train/Test Split
-X_train, X_test, y_train, y_test = train_test_split(X, y,
-                                                    test_size=0.2,
-                                                    random_state=786)
-
-# Step 3: Train a Random Forest model
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=786)
 
 model = RandomForestClassifier(random_state=786)
-model.fit(X_train,y_train)
+model.fit(X_train, y_train)
 
-# Step 4: Make predictions
 y_pred = model.predict(X_test)
 
-# step 5: Evaluate the model 
+st.subheader("Classification Report")
+st.text(classification_report(y_test, y_pred))
 
-print("\nClassification Report:")
-print(classification_report(y_test,y_pred))
+# Confusion Matrix
+st.subheader("Confusion Matrix")
+conf_matrix = confusion_matrix(y_test, y_pred)
+fig, ax = plt.subplots()
+sns.heatmap(conf_matrix, annot=True, fmt="d", cmap="Blues", ax=ax)
+st.pyplot(fig)
 
-# confusion Matrix
-
-conf_matrix = confusion_matrix(y_test,y_pred)
-sns.heatmap(conf_matrix,annot=True,fmt="d",cmap="Blues")
-plt.title(" CONFUSION MATRIX ")
-plt.xlabel("Predicted")
-plt.ylabel("Actual")
-plt.show()
-
-# Step 6: Feature Importance (like PyCaret's feature rank)
-
+# Feature Importance
+st.subheader("Feature Importances")
 importances = model.feature_importances_
 feature_names = X.columns
 feat_importance = pd.Series(importances, index=feature_names)
-feat_importance.sort_values(ascending=True).plot(kind='barh',color="Skyblue")
-plt.title("Feature importances (Random Forest)")
-plt.xlabel("importance score")
-plt.show()
+fig, ax = plt.subplots()
+feat_importance.sort_values(ascending=True).plot(kind='barh', color="Skyblue", ax=ax)
+st.pyplot(fig)
 
 # ------------------------------
-# Predict on a new water sample
+# Predict on new water samples
 # ------------------------------
+st.subheader("Predict Potability for New Samples")
+
+def predict_sample(sample_dict):
+    sample_df = pd.DataFrame([sample_dict])
+    prediction = model.predict(sample_df)
+    return "POTABLE ✅" if prediction[0] == 1 else "NOT POTABLE ❌"
 
 new_sample = {
-    "ph":7.0,
-    "Hardness":200,
-    "Solids": 10000,
-    "Chloramines":7.0,
-    "Sulfate":300,
-    "Conductivity": 400,
-    "Organic_carbon": 12.0,
-    "Trihalomethanes": 75,
-    "Turbidity": 3.5
+    "ph":7.0,"Hardness":200,"Solids":10000,"Chloramines":7.0,
+    "Sulfate":300,"Conductivity":400,"Organic_carbon":12.0,
+    "Trihalomethanes":75,"Turbidity":3.5
 }
+st.write("Sample 1:", predict_sample(new_sample))
 
-# Convert to DataFrame
-sample_df_1 = pd.DataFrame([new_sample])
-
-# Predict potability
-prediction = model.predict(sample_df_1)
-
-# Show result
-print("\nNew Sample Prediction:")
-if prediction[0] == 1:
-    print(" The water is predicted to be POTABLE (safe to drink).")
-else:
-    print(" The water is predicted to be NOT POTABLE (unsafe to drink).")
-    
-new_sample_1 = {
-    
-    "ph": 7.2,                  # Neutral/slightly basic (normal drinking water pH)
-    "Hardness": 180.0,          # Within acceptable range
-    "Solids": 15000.0,          # Not too high
-    "Chloramines": 6.5,         # Within EPA standards (4–10 ppm)
-    "Sulfate": 250.0,           # Within WHO acceptable limits (< 500 mg/L)
-    "Conductivity": 420.0,      # Typical for drinking water
-    "Organic_carbon": 10.0,     # Normal range
-    "Trihalomethanes": 60.0,    # Below limit (80 μg/L by EPA)
-    "Turbidity": 2.5            # Low turbidity = clear water
+new_sample_2 = {
+    "ph":7.2,"Hardness":180.0,"Solids":15000.0,"Chloramines":6.5,
+    "Sulfate":250.0,"Conductivity":420.0,"Organic_carbon":10.0,
+    "Trihalomethanes":60.0,"Turbidity":2.5
 }
-
-# convert to DataFrame
-sample_df_2 = pd.DataFrame([new_sample_1])
-
-# prediction potability
-prediction = model.predict(sample_df_2)
-
-# Show result
-print("\nNew Sample Prediction:")
-if prediction[0] == 1:
-    print("The water is predicted to be POTABLE (safe to drink).")
-else:
-    print("The water is predicted to be NOT POTABLE (unsafe to drink).")
+st.write("Sample 2:", predict_sample(new_sample_2))
